@@ -9,52 +9,53 @@
   <style>
     body { padding: 15px; background: #f4f6f9; font-family: -apple-system, sans-serif; }
     .main-card { background: white; border-radius: 15px; padding: 20px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); margin-bottom: 15px; }
-    #reader { width: 100%; border-radius: 12px; overflow: hidden; background: #000; display: none; min-height: 250px; }
-    #scanResultSection { display: none; background: #e7f3ff; padding: 15px; border-radius: 12px; margin: 15px 0; border: 1px solid #b3d7ff; }
+    #reader { width: 100%; border-radius: 12px; overflow: hidden; background: #000; display: none; min-height: 250px; border: 2px solid #dee2e6; }
+    #scanResultSection { display: none; background: #e7f3ff; padding: 15px; border-radius: 12px; margin: 15px 0; border: 2px solid #007bff; }
     .cart-item { display: flex; justify-content: space-between; align-items: center; padding: 12px 0; border-bottom: 1px solid #eee; }
     .btn-delete { color: #dc3545; border: 1px solid #dc3545; background: none; border-radius: 5px; padding: 2px 8px; font-size: 0.8rem; }
-    .btn-delete:active { background: #dc3545; color: white; }
     .total-footer { background: #2c3e50; color: white; padding: 20px; border-radius: 15px; margin-top: 20px; }
+    /* 加入 Loading 效果 */
+    .loading-spinner { display: none; text-align: center; padding: 10px; color: #007bff; font-weight: bold; }
   </style>
 </head>
 <body>
   <div class="container">
-    <h4 class="text-center mb-3 fw-bold text-primary">🛒 智能收銀系統</h4>
+    <h4 class="text-center mb-3 fw-bold text-primary">🛒 智能收銀系統 (Legends Market)</h4>
     
     <div class="main-card">
       <input type="text" id="custName" class="form-control mb-2" placeholder="客人姓名">
       <input type="tel" id="custPhone" class="form-control" placeholder="電話號碼">
     </div>
 
-    <button id="startBtn" class="btn btn-success w-100 mb-3" onclick="initScanner()">📸 啟動相機掃描</button>
+    <button id="startBtn" class="btn btn-success w-100 mb-3 shadow" onclick="initScanner()">📸 啟動相機掃描</button>
     <div id="reader"></div>
+    <div id="loading" class="loading-spinner">🔍 正在查詢產品資料...</div>
 
+    <!-- 掃描結果區 -->
     <div id="scanResultSection">
-      <h5 id="pName" class="fw-bold text-dark">---</h5>
+      <h5 id="pName" class="fw-bold text-dark text-center mb-3">---</h5>
       <div class="row g-2 align-items-center mb-2">
         <div class="col-8">
           <div class="input-group">
-            <input type="number" id="pQty" class="form-control form-control-lg">
+            <input type="number" id="pQty" class="form-control form-control-lg" autofocus>
             <span class="input-group-text" id="pUnit">---</span>
           </div>
         </div>
         <div class="col-4">
-          <button class="btn btn-primary btn-lg w-100" onclick="addToCart()">加入</button>
+          <button id="addBtn" class="btn btn-primary btn-lg w-100" onclick="addToCart()">加入</button>
         </div>
       </div>
     </div>
 
+    <!-- 清單 -->
     <div class="main-card mt-2">
       <h6 class="text-muted border-bottom pb-2">已選項目：</h6>
-      <div id="cartList">
-        <p class="text-center text-muted py-3" id="emptyMsg">清單目前是空的</p>
-      </div>
+      <div id="cartList"><p class="text-center text-muted py-3" id="emptyMsg">清單目前是空的</p></div>
     </div>
 
     <div class="total-footer shadow">
       <div class="d-flex justify-content-between align-items-center">
         <span>全單總額：</span>
-        <!-- 修改符號為 £ -->
         <h2 class="mb-0 text-warning">£<span id="grandTotal">0.00</span></h2>
       </div>
       <button id="submitBtn" class="btn btn-warning btn-lg w-100 mt-3 fw-bold" onclick="finalCheckout()">✅ 確認提交訂單</button>
@@ -62,6 +63,7 @@
   </div>
 
   <script>
+    // ⚠️ 確保這裡填入完整的 GAS 網址 (以 /exec 結尾)
     const GAS_URL = "https://script.google.com/macros/s/AKfycbz0SvW628TMsYXh5ElE2sZDKvnuIkYNYT9RG6s8L52kTlC4sp4rPcAjO2gAa-psGaIi3Q/exec"; 
 
     const html5QrCode = new Html5Qrcode("reader");
@@ -71,38 +73,55 @@
     function initScanner() {
       document.getElementById('startBtn').style.display = 'none';
       document.getElementById('reader').style.display = 'block';
-      html5QrCode.start({ facingMode: "environment" }, { fps: 15, qrbox: 250 }, onScanSuccess)
-        .catch(err => alert("啟動失敗"));
+      const config = { fps: 20, qrbox: { width: 250, height: 200 } };
+      html5QrCode.start({ facingMode: "environment" }, config, onScanSuccess)
+        .catch(err => {
+          alert("相機啟動失敗，請重新整理頁面並允許權限。");
+          console.error(err);
+        });
     }
 
     function onScanSuccess(barcode) {
-      if (navigator.vibrate) navigator.vibrate(50);
+      // 1. 立即暫停掃描，避免重複讀取
       html5QrCode.pause(true);
-      
+      if (navigator.vibrate) navigator.vibrate(50);
+
+      // 2. 顯示 Loading
+      document.getElementById('loading').style.display = 'block';
+      document.getElementById('scanResultSection').style.display = 'none';
+
+      // 3. 向 GAS 請求數據
       fetch(GAS_URL, {
         method: "POST",
+        mode: 'no-cors', // 增加穩定性
         body: JSON.stringify({ action: "getProduct", barcode: barcode })
       })
       .then(res => res.json())
       .then(product => {
+        document.getElementById('loading').style.display = 'none';
         if (product && !product.error) {
           tempProduct = product;
           document.getElementById('scanResultSection').style.display = 'block';
-          // 修改顯示符號
           document.getElementById('pName').innerText = product.name + " (£" + product.price + ")";
           document.getElementById('pUnit').innerText = product.unit;
           const qtyInput = document.getElementById('pQty');
           qtyInput.value = (product.unit.toLowerCase() === 'kg') ? "0.5" : "1";
+          qtyInput.focus(); // 自動聚焦到數量框
         } else {
-          alert("找不到此產品！");
+          alert("找不到此產品碼: " + barcode);
           html5QrCode.resume();
         }
+      })
+      .catch(err => {
+        document.getElementById('loading').style.display = 'none';
+        alert("網路請求超時或出錯，請重試。");
+        html5QrCode.resume();
       });
     }
 
     function addToCart() {
       const qty = parseFloat(document.getElementById('pQty').value);
-      if (isNaN(qty) || qty <= 0) return alert("請輸入數量");
+      if (isNaN(qty) || qty <= 0) return alert("請輸入有效數量");
 
       cart.push({
         name: tempProduct.name,
@@ -112,8 +131,15 @@
       });
 
       renderCart();
+      
+      // 重置介面，為下一件掃描做準備
       document.getElementById('scanResultSection').style.display = 'none';
-      html5QrCode.resume();
+      tempProduct = null;
+      
+      // ⚠️ 關鍵：確保相機恢復掃描狀態
+      setTimeout(() => {
+        html5QrCode.resume();
+      }, 300); 
     }
 
     function removeItem(index) {
@@ -138,16 +164,15 @@
       let total = 0;
       cart.forEach((item, index) => {
         total += item.subtotal;
-        // 修改顯示符號
         list.innerHTML += `
           <div class="cart-item">
             <div>
-              <div class="fw-bold">${item.name}</div>
+              <div class="fw-bold text-dark">${item.name}</div>
               <small class="text-muted">${item.qty}${item.unit} x £${(item.subtotal/item.qty).toFixed(2)}</small>
             </div>
             <div class="text-end">
-              <div class="fw-bold">£${item.subtotal.toFixed(2)}</div>
-              <button class="btn-delete mt-1" onclick="removeItem(${index})">刪除</button>
+              <div class="fw-bold text-primary">£${item.subtotal.toFixed(2)}</div>
+              <button class="btn-delete mt-1" onclick="removeItem(${index})">❌ 刪除</button>
             </div>
           </div>`;
       });
@@ -157,17 +182,16 @@
     function finalCheckout() {
       const name = document.getElementById('custName').value;
       const phone = document.getElementById('custPhone').value;
-      if (!name || !phone || cart.length === 0) return alert("資料不全");
+      if (!name || !phone || cart.length === 0) return alert("請填寫客人資料並加入產品");
 
       const btn = document.getElementById('submitBtn');
       btn.disabled = true;
-      btn.innerText = "提交中...";
+      btn.innerText = "⏳ 正在傳送訂單...";
 
       const orderData = {
         custName: name,
         custPhone: phone,
         itemsSummary: cart.map(i => `${i.name}(${i.qty}${i.unit})`).join(", "),
-        // 傳送給 Google Sheets 的總額也加上 £ 符號
         finalTotal: "£" + document.getElementById('grandTotal').innerText
       };
 
@@ -177,13 +201,13 @@
       })
       .then(res => res.json())
       .then(data => {
-        alert(data.msg);
+        alert("🎉 " + data.msg);
         location.reload();
       })
       .catch(err => {
-        alert("提交失敗");
+        alert("儲存失敗，但您可以截圖此畫面作為憑證。");
         btn.disabled = false;
-        btn.innerText = "確認提交訂單";
+        btn.innerText = "✅ 確認提交訂單";
       });
     }
   </script>
