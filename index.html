@@ -3,52 +3,67 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>智能掃碼收銀</title>
+  <title>智能收銀 (Legends Market)</title>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
   <script src="https://unpkg.com/html5-qrcode"></script>
   <style>
-    body { padding: 15px; background: #f4f6f9; }
+    body { padding: 15px; background: #f4f6f9; font-family: -apple-system, sans-serif; }
     .main-card { background: white; border-radius: 15px; padding: 20px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); margin-bottom: 15px; }
-    #reader { width: 100%; border-radius: 12px; overflow: hidden; background: #000; display: none; }
-    #scanResultSection { display: none; background: #e7f3ff; padding: 15px; border-radius: 12px; margin: 15px 0; }
-    .total-footer { background: #2c3e50; color: white; padding: 20px; border-radius: 15px; }
+    #reader { width: 100%; border-radius: 12px; overflow: hidden; background: #000; display: none; min-height: 250px; }
+    #scanResultSection { display: none; background: #e7f3ff; padding: 15px; border-radius: 12px; margin: 15px 0; border: 1px solid #b3d7ff; }
+    .cart-item { display: flex; justify-content: space-between; align-items: center; padding: 12px 0; border-bottom: 1px solid #eee; }
+    .btn-delete { color: #dc3545; border: 1px solid #dc3545; background: none; border-radius: 5px; padding: 2px 8px; font-size: 0.8rem; }
+    .btn-delete:active { background: #dc3545; color: white; }
+    .total-footer { background: #2c3e50; color: white; padding: 20px; border-radius: 15px; margin-top: 20px; }
   </style>
 </head>
 <body>
   <div class="container">
-    <h4 class="text-center mb-3 fw-bold">🛒 智能收銀 (獨立版)</h4>
+    <h4 class="text-center mb-3 fw-bold text-primary">🛒 智能收銀系統</h4>
+    
     <div class="main-card">
       <input type="text" id="custName" class="form-control mb-2" placeholder="客人姓名">
       <input type="tel" id="custPhone" class="form-control" placeholder="電話號碼">
     </div>
 
-    <button id="startBtn" class="btn btn-success w-100 mb-3" onclick="initScanner()">📸 啟動相機</button>
+    <button id="startBtn" class="btn btn-success w-100 mb-3" onclick="initScanner()">📸 啟動相機掃描</button>
     <div id="reader"></div>
 
     <div id="scanResultSection">
-      <h5 id="pName" class="fw-bold">---</h5>
-      <div class="input-group mb-2">
-        <input type="number" id="pQty" class="form-control form-control-lg">
-        <span class="input-group-text" id="pUnit">---</span>
+      <h5 id="pName" class="fw-bold text-dark">---</h5>
+      <div class="row g-2 align-items-center mb-2">
+        <div class="col-8">
+          <div class="input-group">
+            <input type="number" id="pQty" class="form-control form-control-lg">
+            <span class="input-group-text" id="pUnit">---</span>
+          </div>
+        </div>
+        <div class="col-4">
+          <button class="btn btn-primary btn-lg w-100" onclick="addToCart()">加入</button>
+        </div>
       </div>
-      <button class="btn btn-primary w-100" onclick="addToCart()">加入清單</button>
     </div>
 
-    <div class="main-card mt-3">
-      <div id="cartList"><p class="text-center text-muted">尚未有項目</p></div>
+    <div class="main-card mt-2">
+      <h6 class="text-muted border-bottom pb-2">已選項目：</h6>
+      <div id="cartList">
+        <p class="text-center text-muted py-3" id="emptyMsg">清單目前是空的</p>
+      </div>
     </div>
 
-    <div class="total-footer">
+    <div class="total-footer shadow">
       <div class="d-flex justify-content-between align-items-center">
         <span>全單總額：</span>
-        <h2 class="mb-0 text-warning">$<span id="grandTotal">0.00</span></h2>
+        <!-- 修改符號為 £ -->
+        <h2 class="mb-0 text-warning">£<span id="grandTotal">0.00</span></h2>
       </div>
-      <button id="submitBtn" class="btn btn-warning w-100 mt-3 fw-bold" onclick="finalCheckout()">確認提交</button>
+      <button id="submitBtn" class="btn btn-warning btn-lg w-100 mt-3 fw-bold" onclick="finalCheckout()">✅ 確認提交訂單</button>
     </div>
   </div>
 
   <script>
-    const GAS_URL = "https://script.google.com/macros/s/AKfycbz0SvW628TMsYXh5ElE2sZDKvnuIkYNYT9RG6s8L52kTlC4sp4rPcAjO2gAa-psGaIi3Q/exec";
+    const GAS_URL = "https://script.google.com/macros/s/AKfycbz0SvW628TMsYXh5ElE2sZDKvnuIkYNYT9RG6s8L52kTlC4sp4rPcAjO2gAa-psGaIi3Q/exec"; 
+
     const html5QrCode = new Html5Qrcode("reader");
     let cart = [];
     let tempProduct = null;
@@ -56,25 +71,30 @@
     function initScanner() {
       document.getElementById('startBtn').style.display = 'none';
       document.getElementById('reader').style.display = 'block';
-      html5QrCode.start({ facingMode: "environment" }, { fps: 10, qrbox: 250 }, onScanSuccess);
+      html5QrCode.start({ facingMode: "environment" }, { fps: 15, qrbox: 250 }, onScanSuccess)
+        .catch(err => alert("啟動失敗"));
     }
 
     function onScanSuccess(barcode) {
+      if (navigator.vibrate) navigator.vibrate(50);
       html5QrCode.pause(true);
+      
       fetch(GAS_URL, {
         method: "POST",
         body: JSON.stringify({ action: "getProduct", barcode: barcode })
       })
       .then(res => res.json())
       .then(product => {
-        if (product) {
+        if (product && !product.error) {
           tempProduct = product;
           document.getElementById('scanResultSection').style.display = 'block';
-          document.getElementById('pName').innerText = product.name;
+          // 修改顯示符號
+          document.getElementById('pName').innerText = product.name + " (£" + product.price + ")";
           document.getElementById('pUnit').innerText = product.unit;
-          document.getElementById('pQty').value = (product.unit === 'kg') ? "0.5" : "1";
+          const qtyInput = document.getElementById('pQty');
+          qtyInput.value = (product.unit.toLowerCase() === 'kg') ? "0.5" : "1";
         } else {
-          alert("找不到產品");
+          alert("找不到此產品！");
           html5QrCode.resume();
         }
       });
@@ -82,33 +102,75 @@
 
     function addToCart() {
       const qty = parseFloat(document.getElementById('pQty').value);
-      cart.push({ name: tempProduct.name, qty: qty, unit: tempProduct.unit, subtotal: qty * tempProduct.price });
+      if (isNaN(qty) || qty <= 0) return alert("請輸入數量");
+
+      cart.push({
+        name: tempProduct.name,
+        qty: qty,
+        unit: tempProduct.unit,
+        subtotal: qty * tempProduct.price
+      });
+
       renderCart();
       document.getElementById('scanResultSection').style.display = 'none';
       html5QrCode.resume();
     }
 
+    function removeItem(index) {
+      if (confirm("確定要刪除此項目嗎？")) {
+        cart.splice(index, 1);
+        renderCart();
+      }
+    }
+
     function renderCart() {
       const list = document.getElementById('cartList');
+      const emptyMsg = document.getElementById('emptyMsg');
       list.innerHTML = "";
+      
+      if (cart.length === 0) {
+        emptyMsg.style.display = "block";
+        document.getElementById('grandTotal').innerText = "0.00";
+        return;
+      }
+      
+      emptyMsg.style.display = "none";
       let total = 0;
-      cart.forEach(item => {
+      cart.forEach((item, index) => {
         total += item.subtotal;
-        list.innerHTML += `<div class="d-flex justify-content-between border-bottom py-2">
-          <span>${item.name} x${item.qty}</span><span>$${item.subtotal.toFixed(2)}</span>
-        </div>`;
+        // 修改顯示符號
+        list.innerHTML += `
+          <div class="cart-item">
+            <div>
+              <div class="fw-bold">${item.name}</div>
+              <small class="text-muted">${item.qty}${item.unit} x £${(item.subtotal/item.qty).toFixed(2)}</small>
+            </div>
+            <div class="text-end">
+              <div class="fw-bold">£${item.subtotal.toFixed(2)}</div>
+              <button class="btn-delete mt-1" onclick="removeItem(${index})">刪除</button>
+            </div>
+          </div>`;
       });
       document.getElementById('grandTotal').innerText = total.toFixed(2);
     }
 
     function finalCheckout() {
+      const name = document.getElementById('custName').value;
+      const phone = document.getElementById('custPhone').value;
+      if (!name || !phone || cart.length === 0) return alert("資料不全");
+
+      const btn = document.getElementById('submitBtn');
+      btn.disabled = true;
+      btn.innerText = "提交中...";
+
       const orderData = {
-        custName: document.getElementById('custName').value,
-        custPhone: document.getElementById('custPhone').value,
-        itemsSummary: cart.map(i => `${i.name}x${i.qty}`).join(", "),
-        finalTotal: document.getElementById('grandTotal').innerText
+        custName: name,
+        custPhone: phone,
+        itemsSummary: cart.map(i => `${i.name}(${i.qty}${i.unit})`).join(", "),
+        // 傳送給 Google Sheets 的總額也加上 £ 符號
+        finalTotal: "£" + document.getElementById('grandTotal').innerText
       };
-      
+
       fetch(GAS_URL, {
         method: "POST",
         body: JSON.stringify({ action: "saveOrder", orderData: orderData })
@@ -117,6 +179,11 @@
       .then(data => {
         alert(data.msg);
         location.reload();
+      })
+      .catch(err => {
+        alert("提交失敗");
+        btn.disabled = false;
+        btn.innerText = "確認提交訂單";
       });
     }
   </script>
