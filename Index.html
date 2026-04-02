@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>智能掃碼收銀</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
+  <script src="https://unpkg.com/html5-qrcode"></script>
+  <style>
+    body { padding: 15px; background: #f4f6f9; }
+    .main-card { background: white; border-radius: 15px; padding: 20px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); margin-bottom: 15px; }
+    #reader { width: 100%; border-radius: 12px; overflow: hidden; background: #000; display: none; }
+    #scanResultSection { display: none; background: #e7f3ff; padding: 15px; border-radius: 12px; margin: 15px 0; }
+    .total-footer { background: #2c3e50; color: white; padding: 20px; border-radius: 15px; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h4 class="text-center mb-3 fw-bold">🛒 智能收銀 (獨立版)</h4>
+    <div class="main-card">
+      <input type="text" id="custName" class="form-control mb-2" placeholder="客人姓名">
+      <input type="tel" id="custPhone" class="form-control" placeholder="電話號碼">
+    </div>
+
+    <button id="startBtn" class="btn btn-success w-100 mb-3" onclick="initScanner()">📸 啟動相機</button>
+    <div id="reader"></div>
+
+    <div id="scanResultSection">
+      <h5 id="pName" class="fw-bold">---</h5>
+      <div class="input-group mb-2">
+        <input type="number" id="pQty" class="form-control form-control-lg">
+        <span class="input-group-text" id="pUnit">---</span>
+      </div>
+      <button class="btn btn-primary w-100" onclick="addToCart()">加入清單</button>
+    </div>
+
+    <div class="main-card mt-3">
+      <div id="cartList"><p class="text-center text-muted">尚未有項目</p></div>
+    </div>
+
+    <div class="total-footer">
+      <div class="d-flex justify-content-between align-items-center">
+        <span>全單總額：</span>
+        <h2 class="mb-0 text-warning">$<span id="grandTotal">0.00</span></h2>
+      </div>
+      <button id="submitBtn" class="btn btn-warning w-100 mt-3 fw-bold" onclick="finalCheckout()">確認提交</button>
+    </div>
+  </div>
+
+  <script>
+    const GAS_URL = "https://script.google.com/macros/s/AKfycbz0SvW628TMsYXh5ElE2sZDKvnuIkYNYT9RG6s8L52kTlC4sp4rPcAjO2gAa-psGaIi3Q/exec";
+    const html5QrCode = new Html5Qrcode("reader");
+    let cart = [];
+    let tempProduct = null;
+
+    function initScanner() {
+      document.getElementById('startBtn').style.display = 'none';
+      document.getElementById('reader').style.display = 'block';
+      html5QrCode.start({ facingMode: "environment" }, { fps: 10, qrbox: 250 }, onScanSuccess);
+    }
+
+    function onScanSuccess(barcode) {
+      html5QrCode.pause(true);
+      fetch(GAS_URL, {
+        method: "POST",
+        body: JSON.stringify({ action: "getProduct", barcode: barcode })
+      })
+      .then(res => res.json())
+      .then(product => {
+        if (product) {
+          tempProduct = product;
+          document.getElementById('scanResultSection').style.display = 'block';
+          document.getElementById('pName').innerText = product.name;
+          document.getElementById('pUnit').innerText = product.unit;
+          document.getElementById('pQty').value = (product.unit === 'kg') ? "0.5" : "1";
+        } else {
+          alert("找不到產品");
+          html5QrCode.resume();
+        }
+      });
+    }
+
+    function addToCart() {
+      const qty = parseFloat(document.getElementById('pQty').value);
+      cart.push({ name: tempProduct.name, qty: qty, unit: tempProduct.unit, subtotal: qty * tempProduct.price });
+      renderCart();
+      document.getElementById('scanResultSection').style.display = 'none';
+      html5QrCode.resume();
+    }
+
+    function renderCart() {
+      const list = document.getElementById('cartList');
+      list.innerHTML = "";
+      let total = 0;
+      cart.forEach(item => {
+        total += item.subtotal;
+        list.innerHTML += `<div class="d-flex justify-content-between border-bottom py-2">
+          <span>${item.name} x${item.qty}</span><span>$${item.subtotal.toFixed(2)}</span>
+        </div>`;
+      });
+      document.getElementById('grandTotal').innerText = total.toFixed(2);
+    }
+
+    function finalCheckout() {
+      const orderData = {
+        custName: document.getElementById('custName').value,
+        custPhone: document.getElementById('custPhone').value,
+        itemsSummary: cart.map(i => `${i.name}x${i.qty}`).join(", "),
+        finalTotal: document.getElementById('grandTotal').innerText
+      };
+      
+      fetch(GAS_URL, {
+        method: "POST",
+        body: JSON.stringify({ action: "saveOrder", orderData: orderData })
+      })
+      .then(res => res.json())
+      .then(data => {
+        alert(data.msg);
+        location.reload();
+      });
+    }
+  </script>
+</body>
+</html>
