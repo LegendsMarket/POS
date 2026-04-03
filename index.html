@@ -3,22 +3,23 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>The Legends POS - 專業帶圖版</title>
+  <title>Legends Market POS System</title>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
   <script src="https://unpkg.com/html5-qrcode"></script>
   <style>
     body { padding: 15px; background: #f4f6f9; font-family: -apple-system, sans-serif; }
     .main-card { background: white; border-radius: 15px; padding: 20px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); margin-bottom: 15px; }
     #reader { width: 100%; border-radius: 12px; overflow: hidden; background: #000; display: none; min-height: 250px; border: 2px solid #007bff; }
-    #scanResultSection { display: none; background: #fff3cd; padding: 15px; border-radius: 12px; margin: 15px 0; border: 2px solid #ffc107; }
     
-    /* 購物車項目樣式 */
+    /* 錯誤訊息提示區 */
+    #errorMessage { display: none; background: #f8d7da; color: #721c24; padding: 15px; border-radius: 12px; margin: 10px 0; border: 1px solid #f5c6cb; text-align: center; }
+    .retry-btn { margin-top: 10px; background: #721c24; color: white; border: none; padding: 5px 15px; border-radius: 5px; }
+
+    #scanResultSection { display: none; background: #fff3cd; padding: 15px; border-radius: 12px; margin: 15px 0; border: 2px solid #ffc107; }
     .cart-item { display: flex; align-items: center; padding: 12px 0; border-bottom: 1px solid #eee; }
     .product-img { width: 55px; height: 55px; object-fit: cover; border-radius: 8px; margin-right: 12px; background: #eee; border: 1px solid #ddd; }
     .product-info { flex-grow: 1; overflow: hidden; }
-    .product-info strong { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .product-price-info { text-align: right; min-width: 80px; }
-    
     .btn-delete { color: #dc3545; border: none; background: none; font-size: 1.2rem; cursor: pointer; padding-left: 10px; }
     .total-footer { background: #2c3e50; color: white; padding: 20px; border-radius: 15px; margin-top: 20px; }
     .loading-text { display: none; text-align: center; color: #007bff; font-weight: bold; margin: 10px 0; }
@@ -26,27 +27,33 @@
 </head>
 <body>
   <div class="container">
-    <h4 class="text-center mb-3 fw-bold text-primary">🛒 The Legends POS</h4>
+    <h4 class="text-center mb-3 fw-bold text-primary">🛒 Legends Market POS System</h4>
     
-    <!-- 客戶資料區 -->
     <div class="main-card">
-      <input type="text" id="custName" class="form-control mb-2" placeholder="客人姓名 (選填)">
-      <input type="tel" id="custPhone" class="form-control" placeholder="電話號碼 (選填)">
+      <input type="text" id="custName" class="form-control mb-2" placeholder="客人姓名">
+      <input type="tel" id="custPhone" class="form-control" placeholder="電話號碼">
     </div>
 
-    <!-- 掃描控制 -->
     <button id="startBtn" class="btn btn-primary btn-lg w-100 mb-3 shadow" onclick="initScanner()">📸 啟動相機掃描</button>
+    
     <div id="reader"></div>
-    <div id="loading" class="loading-text">🔍 正在從 Wix 獲取資料...</div>
 
-    <!-- 掃描結果確認 -->
+    <!-- ⚠️ 錯誤提示區 (取代 Alert) -->
+    <div id="errorMessage">
+        <div id="errorText">找不到此貨品</div>
+        <button class="retry-btn" onclick="resumeScanner()">🔄 點擊重試</button>
+    </div>
+
+    <div id="loading" class="loading-text">🔍 正在搜尋資料庫...</div>
+
+    <!-- 掃描結果 -->
     <div id="scanResultSection">
       <h5 id="pName" class="fw-bold text-dark text-center mb-3">---</h5>
       <div class="row g-2 align-items-center">
         <div class="col-7">
           <div class="input-group">
             <input type="number" id="pQty" class="form-control form-control-lg" value="1" step="any" inputmode="decimal">
-            <span class="input-group-text">數量</span>
+            <span class="input-group-text">數量 / KG</span>
           </div>
         </div>
         <div class="col-5">
@@ -55,16 +62,15 @@
       </div>
     </div>
 
-    <!-- 購物清單 -->
+    <!-- 購物籃清單 -->
     <div class="main-card mt-3">
       <h6 class="text-muted border-bottom pb-2">已選產品清單：</h6>
       <div id="cartList"><p class="text-center text-muted py-3">尚未掃描產品</p></div>
     </div>
 
-    <!-- 總計與提交 -->
     <div class="total-footer shadow">
       <div class="d-flex justify-content-between align-items-center">
-        <span class="fs-5">應付總額：</span>
+        <span>應付總額：</span>
         <h2 class="mb-0 text-warning">£<span id="grandTotal">0.00</span></h2>
       </div>
       <button id="submitBtn" class="btn btn-warning btn-lg w-100 mt-3 fw-bold shadow" onclick="finalCheckout()">✅ 確認提交訂單</button>
@@ -72,7 +78,6 @@
   </div>
 
   <script>
-    // ⚠️ 請確保這是你最新的 GAS 部署網址
     const GAS_URL = "https://script.google.com/macros/s/AKfycbySbuszPlH9x9A4A47j2d2HfEelj8F5UT2KpXSsq9l64we20CmIyaJfLIbLxLo-y0DXZQ/exec"; 
     const WIX_IMG_BASE = "https://static.wixstatic.com/media/";
 
@@ -86,16 +91,21 @@
       document.getElementById('startBtn').style.display = 'none';
       document.getElementById('reader').style.display = 'block';
       
-      const config = { fps: 10, qrbox: { width: 250, height: 200 } };
+      const config = { fps: 15, qrbox: { width: 250, height: 200 } };
       html5QrCode.start({ facingMode: "environment" }, config, onScanSuccess)
-        .catch(err => alert("相機啟動失敗，請確保使用 HTTPS 並開啟權限。"));
+        .catch(err => alert("相機啟動失敗"));
     }
 
     function onScanSuccess(barcode) {
       if (barcode.startsWith('http')) return; 
+      
+      // 1. 停止掃描，避免重複讀取
       html5QrCode.pause(true); 
+      
+      // 2. 介面初始化
       document.getElementById('loading').style.display = 'block';
       document.getElementById('scanResultSection').style.display = 'none';
+      document.getElementById('errorMessage').style.display = 'none';
 
       fetch(GAS_URL, {
         method: "POST",
@@ -104,22 +114,42 @@
       .then(res => res.json())
       .then(product => {
         document.getElementById('loading').style.display = 'none';
+        
         if (product && product.name && !product.error) {
+          // 成功找到貨品
           tempProduct = product;
           document.getElementById('pName').innerText = `${product.name} (£${product.price})`;
           document.getElementById('pQty').value = "1";
           document.getElementById('scanResultSection').style.display = 'block';
           document.getElementById('pQty').focus();
         } else {
-          alert("錯誤: " + (product.error || "找不到產品"));
-          html5QrCode.resume();
+          // 找不到貨品：顯示紅色提示區，不使用 Alert
+          showError(`找不到條碼：${barcode}`);
         }
       })
       .catch(err => {
         document.getElementById('loading').style.display = 'none';
-        alert("網路連線失敗，請檢查 GAS 部署。");
-        html5QrCode.resume();
+        showError("連線失敗，請檢查網路。");
       });
+    }
+
+    // 顯示錯誤訊息函數
+    function showError(msg) {
+        const errDiv = document.getElementById('errorMessage');
+        const errText = document.getElementById('errorText');
+        errText.innerText = msg;
+        errDiv.style.display = 'block';
+        
+        // 3秒後自動嘗試恢復掃描（也可以讓使用者手動點擊按鈕）
+        // setTimeout(resumeScanner, 3000); 
+    }
+
+    // 恢復掃描函數
+    function resumeScanner() {
+        document.getElementById('errorMessage').style.display = 'none';
+        if(html5QrCode) {
+            html5QrCode.resume();
+        }
     }
 
     function addToCart() {
@@ -131,13 +161,14 @@
         qty: qty,
         price: tempProduct.price,
         subtotal: qty * tempProduct.price,
-        // 儲存從 Wix 傳來的圖片檔名
         imgFile: tempProduct.productImageUrl || "" 
       });
 
       renderCart();
       document.getElementById('scanResultSection').style.display = 'none';
-      setTimeout(() => { if(html5QrCode) html5QrCode.resume(); }, 500);
+      
+      // 加入後延遲一下再繼續掃描，給使用者移開商品的時間
+      setTimeout(resumeScanner, 800);
     }
 
     function removeItem(index) {
@@ -158,11 +189,7 @@
 
       cart.forEach((item, index) => {
         total += item.subtotal;
-        
-        // 拼接完整的 Wix 圖片網址
-        const imgSrc = item.imgFile 
-          ? WIX_IMG_BASE + item.imgFile 
-          : "https://via.placeholder.com/60?text=No+Img";
+        const imgSrc = item.imgFile ? WIX_IMG_BASE + item.imgFile : "https://via.placeholder.com/60?text=No+Img";
         
         list.innerHTML += `
           <div class="cart-item">
@@ -203,7 +230,7 @@
         location.reload();
       })
       .catch(err => {
-        alert("提交失敗，請檢查網路連線。");
+        alert("提交失敗");
         btn.disabled = false;
         btn.innerText = "✅ 確認提交訂單";
       });
