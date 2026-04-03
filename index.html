@@ -3,23 +3,20 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>Legends Market POS System</title>
+  <title>Legends Market POS</title>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
   <script src="https://unpkg.com/html5-qrcode"></script>
   <style>
     body { padding: 15px; background: #f4f6f9; font-family: -apple-system, sans-serif; }
     .main-card { background: white; border-radius: 15px; padding: 20px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); margin-bottom: 15px; }
+    .required-label::after { content: " *"; color: red; } /* 必填紅星標記 */
     #reader { width: 100%; border-radius: 12px; overflow: hidden; background: #000; display: none; min-height: 250px; border: 2px solid #007bff; }
-    
-    /* 錯誤訊息提示區 */
     #errorMessage { display: none; background: #f8d7da; color: #721c24; padding: 15px; border-radius: 12px; margin: 10px 0; border: 1px solid #f5c6cb; text-align: center; }
     .retry-btn { margin-top: 10px; background: #721c24; color: white; border: none; padding: 5px 15px; border-radius: 5px; }
-
     #scanResultSection { display: none; background: #fff3cd; padding: 15px; border-radius: 12px; margin: 15px 0; border: 2px solid #ffc107; }
     .cart-item { display: flex; align-items: center; padding: 12px 0; border-bottom: 1px solid #eee; }
     .product-img { width: 55px; height: 55px; object-fit: cover; border-radius: 8px; margin-right: 12px; background: #eee; border: 1px solid #ddd; }
     .product-info { flex-grow: 1; overflow: hidden; }
-    .product-price-info { text-align: right; min-width: 80px; }
     .btn-delete { color: #dc3545; border: none; background: none; font-size: 1.2rem; cursor: pointer; padding-left: 10px; }
     .total-footer { background: #2c3e50; color: white; padding: 20px; border-radius: 15px; margin-top: 20px; }
     .loading-text { display: none; text-align: center; color: #007bff; font-weight: bold; margin: 10px 0; }
@@ -27,26 +24,25 @@
 </head>
 <body>
   <div class="container">
-    <h4 class="text-center mb-3 fw-bold text-primary">🛒 Legends Market POS System</h4>
+    <h4 class="text-center mb-3 fw-bold text-primary">🛒 Legends Market POS </h4>
     
     <div class="main-card">
-      <input type="text" id="custName" class="form-control mb-2" placeholder="客人姓名">
-      <input type="tel" id="custPhone" class="form-control" placeholder="電話號碼">
+      <label class="form-label small text-muted required-label">客人姓名</label>
+      <input type="text" id="custName" class="form-control mb-2" placeholder="請輸入姓名">
+      
+      <label class="form-label small text-muted required-label">電話號碼</label>
+      <input type="tel" id="custPhone" class="form-control" placeholder="請輸入電話">
     </div>
 
     <button id="startBtn" class="btn btn-primary btn-lg w-100 mb-3 shadow" onclick="initScanner()">📸 啟動相機掃描</button>
     
     <div id="reader"></div>
-
-    <!-- ⚠️ 錯誤提示區 (取代 Alert) -->
     <div id="errorMessage">
         <div id="errorText">找不到此貨品</div>
         <button class="retry-btn" onclick="resumeScanner()">🔄 點擊重試</button>
     </div>
-
     <div id="loading" class="loading-text">🔍 正在搜尋資料庫...</div>
 
-    <!-- 掃描結果 -->
     <div id="scanResultSection">
       <h5 id="pName" class="fw-bold text-dark text-center mb-3">---</h5>
       <div class="row g-2 align-items-center">
@@ -62,7 +58,6 @@
       </div>
     </div>
 
-    <!-- 購物籃清單 -->
     <div class="main-card mt-3">
       <h6 class="text-muted border-bottom pb-2">已選產品清單：</h6>
       <div id="cartList"><p class="text-center text-muted py-3">尚未掃描產品</p></div>
@@ -90,72 +85,48 @@
       html5QrCode = new Html5Qrcode("reader");
       document.getElementById('startBtn').style.display = 'none';
       document.getElementById('reader').style.display = 'block';
-      
       const config = { fps: 15, qrbox: { width: 250, height: 200 } };
-      html5QrCode.start({ facingMode: "environment" }, config, onScanSuccess)
-        .catch(err => alert("相機啟動失敗"));
+      html5QrCode.start({ facingMode: "environment" }, config, onScanSuccess).catch(err => alert("相機啟動失敗"));
     }
 
     function onScanSuccess(barcode) {
       if (barcode.startsWith('http')) return; 
-      
-      // 1. 停止掃描，避免重複讀取
       html5QrCode.pause(true); 
-      
-      // 2. 介面初始化
       document.getElementById('loading').style.display = 'block';
       document.getElementById('scanResultSection').style.display = 'none';
       document.getElementById('errorMessage').style.display = 'none';
 
-      fetch(GAS_URL, {
-        method: "POST",
-        body: JSON.stringify({ action: "getProduct", barcode: barcode })
-      })
+      fetch(GAS_URL, { method: "POST", body: JSON.stringify({ action: "getProduct", barcode: barcode }) })
       .then(res => res.json())
       .then(product => {
         document.getElementById('loading').style.display = 'none';
-        
         if (product && product.name && !product.error) {
-          // 成功找到貨品
           tempProduct = product;
           document.getElementById('pName').innerText = `${product.name} (£${product.price})`;
-          document.getElementById('pQty').value = "1";
           document.getElementById('scanResultSection').style.display = 'block';
-          document.getElementById('pQty').focus();
         } else {
-          // 找不到貨品：顯示紅色提示區，不使用 Alert
           showError(`找不到條碼：${barcode}`);
         }
       })
-      .catch(err => {
+      .catch(() => {
         document.getElementById('loading').style.display = 'none';
-        showError("連線失敗，請檢查網路。");
+        showError("連線失敗");
       });
     }
 
-    // 顯示錯誤訊息函數
     function showError(msg) {
-        const errDiv = document.getElementById('errorMessage');
-        const errText = document.getElementById('errorText');
-        errText.innerText = msg;
-        errDiv.style.display = 'block';
-        
-        // 3秒後自動嘗試恢復掃描（也可以讓使用者手動點擊按鈕）
-        // setTimeout(resumeScanner, 3000); 
+        document.getElementById('errorText').innerText = msg;
+        document.getElementById('errorMessage').style.display = 'block';
     }
 
-    // 恢復掃描函數
     function resumeScanner() {
         document.getElementById('errorMessage').style.display = 'none';
-        if(html5QrCode) {
-            html5QrCode.resume();
-        }
+        if(html5QrCode) html5QrCode.resume();
     }
 
     function addToCart() {
       const qty = parseFloat(document.getElementById('pQty').value);
-      if (isNaN(qty) || qty <= 0) return alert("請輸入有效數量");
-
+      if (isNaN(qty) || qty <= 0) return alert("請輸入數量");
       cart.push({
         name: tempProduct.name,
         qty: qty,
@@ -163,11 +134,8 @@
         subtotal: qty * tempProduct.price,
         imgFile: tempProduct.productImageUrl || "" 
       });
-
       renderCart();
       document.getElementById('scanResultSection').style.display = 'none';
-      
-      // 加入後延遲一下再繼續掃描，給使用者移開商品的時間
       setTimeout(resumeScanner, 800);
     }
 
@@ -180,17 +148,14 @@
       const list = document.getElementById('cartList');
       let total = 0;
       list.innerHTML = "";
-      
       if (cart.length === 0) {
         list.innerHTML = '<p class="text-center text-muted py-3">尚未有項目</p>';
         document.getElementById('grandTotal').innerText = "0.00";
         return;
       }
-
       cart.forEach((item, index) => {
         total += item.subtotal;
         const imgSrc = item.imgFile ? WIX_IMG_BASE + item.imgFile : "https://via.placeholder.com/60?text=No+Img";
-        
         list.innerHTML += `
           <div class="cart-item">
             <img src="${imgSrc}" class="product-img" onerror="this.src='https://via.placeholder.com/60?text=Error'">
@@ -207,15 +172,39 @@
       document.getElementById('grandTotal').innerText = total.toFixed(2);
     }
 
+    // ✨ 修改後的 finalCheckout：加入必填驗證
     function finalCheckout() {
-      if (cart.length === 0) return alert("購物車是空的");
+      const name = document.getElementById('custName').value.trim();
+      const phone = document.getElementById('custPhone').value.trim();
+
+      // 1. 檢查姓名是否為空
+      if (!name) {
+        alert("🚨 請輸入客人姓名！");
+        document.getElementById('custName').focus();
+        return;
+      }
+
+      // 2. 檢查電話是否為空
+      if (!phone) {
+        alert("🚨 請輸入客人電話號碼！");
+        document.getElementById('custPhone').focus();
+        return;
+      }
+
+      // 3. 檢查購物籃是否為空
+      if (cart.length === 0) {
+        alert("🚨 購物籃是空的，無法提交。");
+        return;
+      }
+
+      // 全部通過後才進行上傳
       const btn = document.getElementById('submitBtn');
       btn.disabled = true;
       btn.innerText = "⏳ 訂單提交中...";
 
       const orderData = {
-        custName: document.getElementById('custName').value || "Walk-in",
-        custPhone: document.getElementById('custPhone').value || "N/A",
+        custName: name,
+        custPhone: phone,
         itemsSummary: cart.map(i => `${i.name}(x${i.qty})`).join(", "),
         finalTotal: "£" + document.getElementById('grandTotal').innerText
       };
@@ -229,7 +218,7 @@
         alert(data.msg || "訂單已成功提交！");
         location.reload();
       })
-      .catch(err => {
+      .catch(() => {
         alert("提交失敗");
         btn.disabled = false;
         btn.innerText = "✅ 確認提交訂單";
