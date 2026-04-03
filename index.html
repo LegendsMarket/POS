@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>智能收銀系統</title>
+  <title>智能收銀系統 - The Legends Market</title>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
   <script src="https://unpkg.com/html5-qrcode"></script>
   <style>
@@ -15,31 +15,29 @@
     .btn-delete { color: #dc3545; border: none; background: none; font-size: 0.9rem; padding: 0 5px; }
     .total-footer { background: #2c3e50; color: white; padding: 20px; border-radius: 15px; margin-top: 20px; }
     .loading-text { display: none; text-align: center; color: #007bff; font-weight: bold; margin: 10px 0; }
+    .badge-market { background-color: #dc3545; color: white; font-size: 0.7rem; padding: 3px 6px; border-radius: 4px; vertical-align: middle; margin-right: 5px; }
   </style>
 </head>
 <body>
   <div class="container">
-    <h4 class="text-center mb-3 fw-bold text-primary">🛒 智能收銀</h4>
+    <h4 class="text-center mb-3 fw-bold text-primary">🛒 The Legends POS</h4>
     
-    <!-- 客戶資料 -->
     <div class="main-card">
-      <input type="text" id="custName" class="form-control mb-2" placeholder="客人姓名">
-      <input type="tel" id="custPhone" class="form-control" placeholder="電話號碼">
+      <input type="text" id="custName" class="form-control mb-2" placeholder="客人姓名 (選填)">
+      <input type="tel" id="custPhone" class="form-control" placeholder="電話號碼 (選填)">
     </div>
 
-    <!-- 掃描控制 -->
     <button id="startBtn" class="btn btn-success w-100 mb-3 shadow-sm" onclick="initScanner()">📸 啟動相機掃描</button>
     <div id="reader"></div>
     <div id="loading" class="loading-text">🔍 正在查詢 Wix 資料庫...</div>
 
-    <!-- 掃描結果顯示 -->
     <div id="scanResultSection">
-      <h5 id="pName" class="fw-bold text-dark text-center">---</h5>
+      <h5 id="pName" class="fw-bold text-dark text-center mb-3">---</h5>
       <div class="row g-2 align-items-center mb-2">
         <div class="col-7">
           <div class="input-group">
-            <input type="number" id="pQty" class="form-control form-control-lg" step="any">
-            <span class="input-group-text" id="pUnit">數量</span>
+            <input type="number" id="pQty" class="form-control form-control-lg" step="any" inputmode="decimal">
+            <span class="input-group-text" id="pUnitLabel">數量 / KG</span>
           </div>
         </div>
         <div class="col-5">
@@ -49,13 +47,11 @@
       <small id="priceHint" class="text-muted d-block text-center"></small>
     </div>
 
-    <!-- 已選清單 -->
     <div class="main-card mt-3">
       <h6 class="text-muted border-bottom pb-2">已選清單：</h6>
       <div id="cartList"><p class="text-center text-muted py-3">尚未有項目</p></div>
     </div>
 
-    <!-- 結賬按鈕區 -->
     <div class="total-footer shadow">
       <div class="d-flex justify-content-between align-items-center">
         <span>應付總額：</span>
@@ -66,7 +62,7 @@
   </div>
 
   <script>
-    // ⚠️ 確保這裡是你的 GAS 部署網址
+    // ⚠️ 確保這裡是你的最新 GAS 部署網址 (結尾必須是 /exec)
     const GAS_URL = "https://script.google.com/macros/s/AKfycbySbuszPlH9x9A4A47j2d2HfEelj8F5UT2KpXSsq9l64we20CmIyaJfLIbLxLo-y0DXZQ/exec"; 
     
     const html5QrCode = new Html5Qrcode("reader");
@@ -76,138 +72,16 @@
     function initScanner() {
       document.getElementById('startBtn').style.display = 'none';
       document.getElementById('reader').style.display = 'block';
-      const config = { fps: 15, qrbox: { width: 250, height: 200 } };
+      // 限制掃描格式，避免掃到 QR Code 網址
+      const config = { 
+        fps: 15, 
+        qrbox: { width: 250, height: 200 },
+        formatsToSupport: [ Html5QrcodeSupportedFormats.EAN_13, Html5QrcodeSupportedFormats.CODE_128 ]
+      };
       html5QrCode.start({ facingMode: "environment" }, config, onScanSuccess)
         .catch(err => alert("相機啟動失敗，請確保使用 HTTPS 並開啟權限。"));
     }
 
     function onScanSuccess(barcode) {
-      html5QrCode.pause(true); // 暫停掃描以處理請求
-      document.getElementById('loading').style.display = 'block';
-      document.getElementById('scanResultSection').style.display = 'none';
-
-      fetch(GAS_URL, {
-        method: "POST",
-        body: JSON.stringify({ action: "getProduct", barcode: barcode })
-      })
-      .then(res => res.json())
-      .then(product => {
-        document.getElementById('loading').style.display = 'none';
-        if (product && product.name) {
-          tempProduct = product;
-          document.getElementById('scanResultSection').style.display = 'block';
-          
-          const qtyInput = document.getElementById('pQty');
-          const pUnitLabel = document.getElementById('pUnit');
-          
-          if (product.price === 0) {
-            document.getElementById('pName').innerText = product.name + " (時價)";
-            pUnitLabel.innerText = "£ 總額";
-            qtyInput.value = ""; 
-            qtyInput.placeholder = "輸入成交額";
-          } else {
-            document.getElementById('pName').innerText = product.name + " (£" + product.price + ")";
-            pUnitLabel.innerText = "數量";
-            qtyInput.value = "1";
-          }
-          qtyInput.focus();
-        } else {
-          alert("Wix 找不到條碼：" + barcode);
-          html5QrCode.resume();
-        }
-      })
-      .catch(err => {
-        document.getElementById('loading').style.display = 'none';
-        alert("查詢失敗，請檢查網路連線。");
-        html5QrCode.resume();
-      });
-    }
-
-    function addToCart() {
-      const val = parseFloat(document.getElementById('pQty').value);
-      if (isNaN(val) || val <= 0) return alert("請輸入有效數值");
-
-      let subtotal = (tempProduct.price === 0) ? val : (val * tempProduct.price);
-      let displayQty = (tempProduct.price === 0) ? 1 : val;
-
-      cart.push({
-        name: tempProduct.name,
-        qty: displayQty,
-        price: tempProduct.price === 0 ? val : tempProduct.price,
-        subtotal: subtotal
-      });
-
-      renderCart();
-      document.getElementById('scanResultSection').style.display = 'none';
-      
-      // 延遲一點點再重啟掃描，體驗更好
-      setTimeout(() => { html5QrCode.resume(); }, 500);
-    }
-
-    function removeItem(index) {
-      cart.splice(index, 1);
-      renderCart();
-    }
-
-    function renderCart() {
-      const list = document.getElementById('cartList');
-      list.innerHTML = "";
-      let total = 0;
-      
-      if (cart.length === 0) {
-        list.innerHTML = '<p class="text-center text-muted py-3">尚未有項目</p>';
-        document.getElementById('grandTotal').innerText = "0.00";
-        return;
-      }
-
-      cart.forEach((item, index) => {
-        total += item.subtotal;
-        list.innerHTML += `
-          <div class="cart-item">
-            <div>
-              <strong>${item.name}</strong><br>
-              <small class="text-muted">${item.qty} x £${(item.subtotal/item.qty).toFixed(2)}</small>
-            </div>
-            <div>
-              <span class="fw-bold">£${item.subtotal.toFixed(2)}</span>
-              <button class="btn-delete" onclick="removeItem(${index})">❌</button>
-            </div>
-          </div>`;
-      });
-      document.getElementById('grandTotal').innerText = total.toFixed(2);
-    }
-
-    function finalCheckout() {
-      const name = document.getElementById('custName').value;
-      const phone = document.getElementById('custPhone').value;
-      if (!name || !phone || cart.length === 0) return alert("請填寫資料並掃描產品");
-
-      const btn = document.getElementById('submitBtn');
-      btn.disabled = true;
-      btn.innerText = "⏳ 提交訂單中...";
-
-      const orderData = {
-        custName: name,
-        custPhone: phone,
-        itemsSummary: cart.map(i => `${i.name}(x${i.qty})`).join(", "),
-        finalTotal: "£" + document.getElementById('grandTotal').innerText
-      };
-      
-      fetch(GAS_URL, {
-        method: "POST",
-        body: JSON.stringify({ action: "saveOrder", orderData: orderData })
-      })
-      .then(res => res.json())
-      .then(data => {
-        alert(data.msg);
-        location.reload();
-      })
-      .catch(err => {
-        alert("提交訂單時發生錯誤");
-        btn.disabled = false;
-        btn.innerText = "確認提交";
-      });
-    }
-  </script>
-</body>
-</html>
+      // 排除網址
+      if (barcode.startsWith('http')) return;
