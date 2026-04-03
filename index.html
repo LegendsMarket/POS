@@ -1,82 +1,4 @@
-<!DOCTYPE html>
-<html lang="zh-Hant">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>Legends Market POS</title>
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
-  <script src="https://unpkg.com/html5-qrcode"></script>
-  <style>
-    body { padding: 15px; background: #f4f6f9; font-family: -apple-system, sans-serif; }
-    .main-card { background: white; border-radius: 15px; padding: 20px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); margin-bottom: 15px; }
-    #reader { width: 100%; border-radius: 12px; overflow: hidden; background: #000; display: none; min-height: 250px; border: 2px solid #dee2e6; }
-    #scanResultSection { display: none; background: #e7f3ff; padding: 15px; border-radius: 12px; margin: 15px 0; border: 2px solid #007bff; }
-    .cart-item { display: flex; justify-content: space-between; align-items: center; padding: 12px 0; border-bottom: 1px solid #eee; }
-    .btn-delete { color: #dc3545; border: 1px solid #dc3545; background: none; border-radius: 5px; padding: 2px 8px; font-size: 0.8rem; }
-    .total-footer { background: #2c3e50; color: white; padding: 20px; border-radius: 15px; margin-top: 20px; }
-    .loading-spinner { display: none; text-align: center; padding: 10px; color: #007bff; font-weight: bold; }
-  </style>
-</head>
-<body>
-  <div class="container">
-    <h4 class="text-center mb-3 fw-bold text-primary">🛒 智能收銀系統</h4>
-    
-    <div class="main-card">
-      <input type="text" id="custName" class="form-control mb-2" placeholder="客人姓名">
-      <input type="tel" id="custPhone" class="form-control" placeholder="電話號碼">
-    </div>
-
-    <button id="startBtn" class="btn btn-success w-100 mb-3 shadow" onclick="initScanner()">📸 啟動相機掃描</button>
-    <div id="reader"></div>
-    <div id="loading" class="loading-spinner">🔍 正在查詢產品資料...</div>
-
-    <!-- 掃描結果區 -->
-    <div id="scanResultSection">
-      <h5 id="pName" class="fw-bold text-dark text-center mb-3">---</h5>
-      <div class="row g-2 align-items-center mb-2">
-        <div class="col-8">
-          <div class="input-group">
-            <input type="number" id="pQty" class="form-control form-control-lg">
-            <span class="input-group-text" id="pUnit">---</span>
-          </div>
-        </div>
-        <div class="col-4">
-          <button id="addBtn" class="btn btn-primary btn-lg w-100" onclick="addToCart()">加入</button>
-        </div>
-      </div>
-    </div>
-
-    <!-- 購物車清單 -->
-    <div class="main-card mt-2">
-      <h6 class="text-muted border-bottom pb-2">已選項目：</h6>
-      <div id="cartList"><p class="text-center text-muted py-3" id="emptyMsg">清單目前是空的</p></div>
-    </div>
-
-    <div class="total-footer shadow">
-      <div class="d-flex justify-content-between align-items-center">
-        <span>全單總額：</span>
-        <h2 class="mb-0 text-warning">£<span id="grandTotal">0.00</span></h2>
-      </div>
-      <button id="submitBtn" class="btn btn-warning btn-lg w-100 mt-3 fw-bold" onclick="finalCheckout()">✅ 確認提交訂單</button>
-    </div>
-  </div>
-
-  <script>
-    // ⚠️ 請填入你的 Google Script 部署網址 (/exec 結尾)
-    const GAS_URL = "https://script.google.com/macros/s/AKfycbz0SvW628TMsYXh5ElE2sZDKvnuIkYNYT9RG6s8L52kTlC4sp4rPcAjO2gAa-psGaIi3Q/exec"; 
-
-    const html5QrCode = new Html5Qrcode("reader");
-    let cart = [];
-    let tempProduct = null;
-
-    function initScanner() {
-      document.getElementById('startBtn').style.display = 'none';
-      document.getElementById('reader').style.display = 'block';
-      html5QrCode.start({ facingMode: "environment" }, { fps: 15, qrbox: 250 }, onScanSuccess)
-        .catch(err => alert("相機啟動失敗，請確保使用 HTTPS 並允許權限。"));
-    }
-
-    function onScanSuccess(barcode) {
+function onScanSuccess(barcode) {
       html5QrCode.pause(true);
       if (navigator.vibrate) navigator.vibrate(50);
 
@@ -91,111 +13,55 @@
       .then(product => {
         document.getElementById('loading').style.display = 'none';
         if (product && product.name) {
-          tempProduct = product;
+          tempProduct = product; // 暫存產品資料
           document.getElementById('scanResultSection').style.display = 'block';
-          document.getElementById('pName').innerText = product.name + " (£" + product.price + ")";
-          document.getElementById('pUnit').innerText = product.unit;
+          
           const qtyInput = document.getElementById('pQty');
-          qtyInput.value = (product.unit.toLowerCase() === 'kg') ? "0.5" : "1";
+          
+          // 判斷是否為時價產品 (價格為 0)
+          if (product.price === 0) {
+            document.getElementById('pName').innerText = product.name + " (請輸入總價)";
+            document.getElementById('pUnit').innerText = "£ 總額";
+            qtyInput.placeholder = "輸入成交總金額";
+            qtyInput.value = ""; 
+          } else {
+            document.getElementById('pName').innerText = product.name + " (£" + product.price + ")";
+            document.getElementById('pUnit').innerText = "數量";
+            qtyInput.value = "1";
+          }
+          qtyInput.focus();
         } else {
-          alert("找不到產品碼: " + barcode);
+          alert("找不到產品！");
           html5QrCode.resume();
         }
-      })
-      .catch(err => {
-        document.getElementById('loading').style.display = 'none';
-        alert("連線錯誤！請檢查 Google Script 是否已設為『所有人』存取。");
-        html5QrCode.resume();
       });
     }
 
     function addToCart() {
-      const qty = parseFloat(document.getElementById('pQty').value);
-      if (isNaN(qty) || qty <= 0) return alert("請輸入有效數量");
+      const inputVal = parseFloat(document.getElementById('pQty').value);
+      if (isNaN(inputVal) || inputVal <= 0) return alert("請輸入有效數值");
+
+      let finalSubtotal = 0;
+      let displayQty = inputVal;
+
+      if (tempProduct.price === 0) {
+        // 時價產品：輸入值直接就是總額
+        finalSubtotal = inputVal;
+        displayQty = 1; // 顯示為 1 份
+      } else {
+        // 普通產品：數量 * 單價
+        finalSubtotal = inputVal * tempProduct.price;
+      }
 
       cart.push({
         name: tempProduct.name,
-        qty: qty,
-        unit: tempProduct.unit,
-        subtotal: qty * tempProduct.price
+        qty: displayQty,
+        unit: (tempProduct.price === 0) ? "份" : "個",
+        subtotal: finalSubtotal
       });
 
       renderCart();
       document.getElementById('scanResultSection').style.display = 'none';
       tempProduct = null;
-      
-      // 延遲一點點重啟相機，避免 iOS 卡死
       setTimeout(() => { html5QrCode.resume(); }, 500); 
     }
-
-    function removeItem(index) {
-      if (confirm("確定要刪除此項目嗎？")) {
-        cart.splice(index, 1);
-        renderCart();
-      }
-    }
-
-    function renderCart() {
-      const list = document.getElementById('cartList');
-      const emptyMsg = document.getElementById('emptyMsg');
-      list.innerHTML = "";
-      
-      if (cart.length === 0) {
-        emptyMsg.style.display = "block";
-        document.getElementById('grandTotal').innerText = "0.00";
-        return;
-      }
-      
-      emptyMsg.style.display = "none";
-      let total = 0;
-      cart.forEach((item, index) => {
-        total += item.subtotal;
-        list.innerHTML += `
-          <div class="cart-item">
-            <div>
-              <div class="fw-bold">${item.name}</div>
-              <small class="text-muted">${item.qty}${item.unit} x £${(item.subtotal/item.qty).toFixed(2)}</small>
-            </div>
-            <div class="text-end">
-              <div class="fw-bold">£${item.subtotal.toFixed(2)}</div>
-              <button class="btn-delete mt-1" onclick="removeItem(${index})">❌ 刪除</button>
-            </div>
-          </div>`;
-      });
-      document.getElementById('grandTotal').innerText = total.toFixed(2);
-    }
-
-    function finalCheckout() {
-      const name = document.getElementById('custName').value;
-      const phone = document.getElementById('custPhone').value;
-      if (!name || !phone || cart.length === 0) return alert("請輸入客戶資料並加入產品");
-
-      const btn = document.getElementById('submitBtn');
-      btn.disabled = true;
-      btn.innerText = "⏳ 提交中...";
-
-      const orderData = {
-        custName: name,
-        custPhone: phone,
-        itemsSummary: cart.map(i => `${i.name}(${i.qty}${i.unit})`).join(", "),
-        finalTotal: "£" + document.getElementById('grandTotal').innerText
-      };
-
-      fetch(GAS_URL, {
-        method: "POST",
-        body: JSON.stringify({ action: "saveOrder", orderData: orderData })
-      })
-      .then(res => res.json())
-      .then(data => {
-        alert(data.msg || "成功提交");
-        location.reload();
-      })
-      .catch(err => {
-        alert("提交失敗，請檢查網絡連線");
-        btn.disabled = false;
-        btn.innerText = "✅ 確認提交訂單";
-      });
-    }
-  </script>
-</body>
-</html>
