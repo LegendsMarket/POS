@@ -21,7 +21,6 @@
     
     /* 購物車項目樣式 */
     .cart-item { display: flex; align-items: center; padding: 12px 0; border-bottom: 1px solid #eee; }
-    .product-img { width: 55px; height: 55px; object-fit: cover; border-radius: 8px; margin-right: 12px; border: 1px solid #ddd; background: #eee; }
     .product-info { flex-grow: 1; }
     
     /* 結账區與金額、件數樣式 */
@@ -46,7 +45,7 @@
       <small class="text-muted">（掃描後會自動查詢）</small>
     </div>
 
-    <button id="startBtn" class="btn btn-outline-primary btn-sm w-100 mb-3" onclick="initScanner()">切換至手機鏡頭掃描</button>
+    <button id="startBtn" class="btn btn-outline-primary btn-sm w-100 mb-3" onclick="initScanner()">📷 切換至手機鏡頭掃描</button>
     <div id="reader"></div>
 
     <div id="errorMessage" onclick="this.style.display='none'">
@@ -91,8 +90,8 @@
   </div>
 
   <script>
+    // 請確認或填入你最新部署的 Google Apps Script 網址
     const GAS_URL = "https://script.google.com/macros/s/AKfycbwjNICV4kym3FjggNfgQKIJDoLYO1dEQtHaxSksnQjFeZ6QiMYsukaqF3LccST80-Sn/exec"; 
-    const WIX_IMG_BASE = "https://static.wixstatic.com/media/";
 
     let html5QrCode;
     let cart = [];
@@ -125,9 +124,13 @@
       .then(res => res.json())
       .then(product => {
         document.getElementById('loading').style.display = 'none';
-        if (product && product.name && !product.error) {
+        if (product && product.enName && !product.error) {
           tempProduct = product;
-          document.getElementById('pName').innerText = `${product.name} (£${product.price})`;
+          
+          // 組合顯示：英文名 (中文description) (£價格)
+          const displayName = `${product.enName} (${product.zhName}) (£${product.price.toFixed(2)})`;
+          document.getElementById('pName').innerText = displayName;
+          
           document.getElementById('scanResultSection').style.display = 'block';
           document.getElementById('pQty').value = "1";
           document.getElementById('pQty').focus(); 
@@ -160,13 +163,17 @@
     function addToCart() {
       const qty = parseFloat(document.getElementById('pQty').value);
       if (isNaN(qty) || qty <= 0) return alert("請輸入數量");
+      
+      // 組合產品中英文名稱
+      const fullName = `${tempProduct.enName} (${tempProduct.zhName})`;
+      
       cart.push({
-        name: tempProduct.name,
+        name: fullName,
         qty: qty,
         price: tempProduct.price,
-        subtotal: qty * tempProduct.price,
-        imgFile: tempProduct.productImageUrl || "" 
+        subtotal: qty * tempProduct.price
       });
+      
       renderCart();
       document.getElementById('scanResultSection').style.display = 'none';
       barcodeInput.focus(); 
@@ -178,43 +185,38 @@
       renderCart();
     }
 
-    // ✨ 修改後的渲染清單函數（加入總件數計算邏輯）
     function renderCart() {
       const list = document.getElementById('cartList');
       let totalPrice = 0;
-      let totalQty = 0; // 用來記錄累加的件數
+      let totalQty = 0;
       list.innerHTML = "";
       
       if (cart.length === 0) {
         list.innerHTML = '<p class="text-center text-muted py-3">尚未有項目</p>';
         document.getElementById('grandTotal').innerText = "0.00";
-        document.getElementById('totalItems').innerText = "0"; // 空購物車
+        document.getElementById('totalItems').innerText = "0";
         return;
       }
       
       cart.forEach((item, index) => {
         totalPrice += item.subtotal;
-        totalQty += item.qty; // 累加每樣產品輸入的數量（支援小數點或整數）
+        totalQty += item.qty;
         
-        const imgSrc = item.imgFile ? WIX_IMG_BASE + item.imgFile : "https://via.placeholder.com/60?text=No+Img";
+        // 渲染清單（純文字顯示中英文名稱與價格，無圖片）
         list.innerHTML += `
           <div class="cart-item">
-            <img src="${imgSrc}" class="product-img" onerror="this.src='https://via.placeholder.com/60?text=Error'">
             <div class="product-info">
-              <strong class="text-dark">${item.name}</strong>
+              <strong class="text-dark d-block">${item.name}</strong>
               <small class="text-muted">${item.qty} x £${item.price.toFixed(2)}</small>
             </div>
-            <div class="product-price-info text-end" style="min-width: 80px;">
+            <div class="product-price-info text-end me-2" style="min-width: 80px;">
               <span class="fw-bold text-primary">£${item.subtotal.toFixed(2)}</span>
             </div>
-            <button class="btn-delete" onclick="removeItem(${index})">❌</button>
+            <button class="btn btn-sm btn-outline-danger" onclick="removeItem(${index})">❌</button>
           </div>`;
       });
       
-      // 更新畫面的金額與件數
       document.getElementById('grandTotal').innerText = totalPrice.toFixed(2);
-      
-      // 如果件數有小數點（例如秤重商品 1.5kg），顯示小數；一般商品則顯示整數
       document.getElementById('totalItems').innerText = Number.isInteger(totalQty) ? totalQty : totalQty.toFixed(2);
     }
 
